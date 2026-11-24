@@ -1,6 +1,9 @@
+using SimpleBox.Core;
 using SimpleBox.Gameplay;
 using SimpleBox.World;
+using Unity.Collections;
 using Unity.Netcode;
+using Unity.Services.Authentication;
 using UnityEngine;
 
 namespace SimpleBox.Net
@@ -25,9 +28,20 @@ namespace SimpleBox.Net
         [Tooltip("Host: physgun used on behalf of this player (Configured At Runtime = on).")]
         [SerializeField] private PhysicsGun proxyPhysgun;
 
+        [Header("References (optional)")]
+        [Tooltip("Nickname above the body (hidden for the owner, faces the local camera).")]
+        [SerializeField] private TextMesh nameTag;
+
         [Header("Rates")]
         [Tooltip("Aim / hold-adjust messages per second from the owner.")]
         [SerializeField, Min(1f)] private float sendRate = 15f;
+
+        // Profile (server writes; everyone reads). Nickname is sanitized on the host.
+        private readonly NetworkVariable<FixedString64Bytes> _nickname = new NetworkVariable<FixedString64Bytes>();
+        private readonly NetworkVariable<FixedString64Bytes> _authId = new NetworkVariable<FixedString64Bytes>();
+        private string _nicknameCache = string.Empty;
+        private string _authIdCache = string.Empty;
+        private bool _hiddenByBlock;
 
         private NetworkGameplay _gameplay;
         private float _nextSendTime;
@@ -53,11 +67,20 @@ namespace SimpleBox.Net
                 return;
             }
 
+            _nickname.OnValueChanged += OnNicknameChanged;
+            _authId.OnValueChanged += OnAuthIdChanged;
+            _nicknameCache = _nickname.Value.ToString();
+            _authIdCache = _authId.Value.ToString();
+            RefreshNameTag();
+            _gameplay.RegisterPlayer(this);
+
             if (IsOwner)
             {
                 visual.SetActive(false);
                 bodyCollider.enabled = false;
+                if (nameTag != null) nameTag.gameObject.SetActive(false);
                 _gameplay.BindLocalAvatar(this);
+                ProfileRpc(PlayerProfile.Nickname, LocalAuthId());
             }
 
             if (IsServer && !IsOwner)
@@ -70,13 +93,20 @@ namespace SimpleBox.Net
 
         public override void OnNetworkDespawn()
         {
-            if (_gameplay != null && IsOwner) _gameplay.UnbindLocalAvatar(this);
+            _nickname.OnValueChanged -= OnNicknameChanged;
+            _authId.OnValueChanged -= OnAuthIdChanged;
+            if (_gameplay != null)
+            {
+                if (IsOwner) _gameplay.UnbindLocalAvatar(this);
+                _gameplay.UnregisterPlayer(this);
+            }
             if (proxyPhysgun != null && proxyPhysgun.enabled) proxyPhysgun.Drop();
         }
 
         private void LateUpdate()
         {
             if (!_valid || !IsSpawned || _gameplay == null) return;
+            UpdateNameTag();
 
             if (IsOwner)
             {
@@ -105,6 +135,84 @@ namespace SimpleBox.Net
                     HoldStateRpc(holding);
                 }
             }
+        }
+
+        // ================================================================== Profile (nickname, auth id)
+
+        /// <summary>Nickname as shown to everyone ("Игрок N" until the owner's profile arrives).</summary>
+        public string Nickname => _nicknameCache.Length > 0 ? _nicknameCache : Loc.T("Игрок ") + OwnerClientId;
+
+        /// <summary>Unity Authentication player id (stable across sessions; used for block / report / kick).</summary>
+        public string AuthId => _authIdCache;
+
+        /// <summary>Owner id used by the sandbox (= NGO client id).</summary>
+        public int PlayerOwnerId => (int)OwnerClientId;
+
+
+        private static string LocalAuthId()
+        {
+            try
+            {
+                return AuthenticationService.Instance != null && AuthenticationService.Instance.IsSignedIn
+                    ? AuthenticationService.Instance.PlayerId ?? string.Empty
+                    : string.Empty;
+            }
+            catch (System.Exception)
+            {
+                return string.Empty; // services not initialized
+            }
+        }
+
+        [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Owner)]
+        private void ProfileRpc(string nickname, string authId)
+        {
+            string clean = PlayerProfile.Sanitize(nickname);
+            if (clean.Length == 0) clean = "Player " + OwnerClientId; // neutral: seen by everyone
+            var name = new FixedString64Bytes();
+            name.CopyFromTruncated(clean);
+            var id = new FixedString64Bytes();
+            id.CopyFromTruncated(authId ?? string.Empty);
+            _nickname.Value = name;
+            _authId.Value = id;
+
+            // The host blocked this player earlier: not allowed back in.
+            if (!IsOwner && _gameplay != null && BlockList.IsBlocked(authId)) _gameplay.Kick(this);
+        }
+
+        private void OnNicknameChanged(FixedString64Bytes previous, FixedString64Bytes current)
+        {
+            _nicknameCache = current.ToString();
+            RefreshNameTag();
+            if (_gameplay != null) _gameplay.NotifyPlayersChanged();
+        }
+
+        private void OnAuthIdChanged(FixedString64Bytes previous, FixedString64Bytes current)
+        {
+            _authIdCache = current.ToString();
+            if (_gameplay != null) _gameplay.NotifyPlayersChanged(); // block state may apply now
+        }
+
+        private void RefreshNameTag()
+        {
+            if (nameTag != null) nameTag.text = Nickname;
+        }
+
+        /// <summary>Local view only: hides a blocked player's body and name.</summary>
+        public void SetHiddenByBlock(bool hidden)
+        {
+            if (_hiddenByBlock == hidden || IsOwner) return;
+            _hiddenByBlock = hidden;
+            if (visual != null) visual.SetActive(!hidden);
+            if (nameTag != null) nameTag.gameObject.SetActive(!hidden);
+        }
+
+        private void UpdateNameTag()
+        {
+            if (nameTag == null || IsOwner || _hiddenByBlock) return;
+            Transform cam = _gameplay.LocalAim;
+            Transform tag = nameTag.transform;
+            Vector3 away = tag.position - cam.position;
+            if (away.sqrMagnitude > 1e-4f) tag.rotation = Quaternion.LookRotation(away, Vector3.up);
         }
 
         // ================================================================== IActionTransport (owner -> host)

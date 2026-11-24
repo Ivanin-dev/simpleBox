@@ -1,3 +1,4 @@
+using SimpleBox.Core;
 using System;
 using System.IO;
 using UnityEngine;
@@ -101,16 +102,16 @@ namespace SimpleBox.World
         public string DescribeSlot(int slot)
         {
             string json = ReadSlot(slot);
-            if (string.IsNullOrEmpty(json)) return "пусто";
+            if (string.IsNullOrEmpty(json)) return Loc.T("пусто");
             try
             {
                 Blueprint bp = JsonUtility.FromJson<Blueprint>(json);
                 int count = bp != null && bp.entities != null ? bp.entities.Count : 0;
-                return $"{count} об. · {bp?.savedAt}";
+                return count + " " + Loc.T("об.") + " · " + bp?.savedAt;
             }
             catch (Exception)
             {
-                return "повреждён";
+                return Loc.T("повреждён");
             }
         }
 
@@ -130,7 +131,8 @@ namespace SimpleBox.World
             Message?.Invoke(WriteSlot(slot, json) ? MsgSaved : MsgError);
         }
 
-        private void Autosave()
+        /// <summary>Writes the autosave slot now (host / offline only). Also used when returning to the main menu.</summary>
+        public void Autosave()
         {
             if (!_valid || !autosaveOnPause || actions.IsRemoteClient) return;
             string json = actions.ExecuteCapture(actions.LocalOwnerId, 0, 0f);

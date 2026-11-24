@@ -25,6 +25,7 @@ namespace SimpleBox.EditorTools
         private static void BuildNetwork(SystemsRefs sys, GameObject player, MobileInputController input, PropCatalog catalog, int playerLayer)
         {
             GameObject avatar = GetOrCreateAvatarPrefab(playerLayer);
+            EnsureAvatarNameTag(avatar);
 
             var prefabs = new List<GameObject> { avatar };
             for (int i = 0; i < catalog.Count; i++)
@@ -75,6 +76,7 @@ namespace SimpleBox.EditorTools
             SetRefs(worldState, ("registry", sys.Registry), ("cableVisuals", sys.Cables),
                 ("explosions", sys.Explosions), ("explosionFx", sys.ExplosionFx));
             BuildSessionUi(input, session);
+            BuildPlayersPanel(input, gameplay);
         }
 
         /// <summary>NetworkObject + NetworkTransform (server authority, no scale) + NetworkRigidbody + NetworkEntity.</summary>
@@ -300,6 +302,9 @@ namespace SimpleBox.EditorTools
                 ("codeText", code),
                 ("input", input));
 
+            TouchButton close = CreateButton("CloseButton", "OK", panel, new Vector2(1f, 1f), new Vector2(-60f, -50f), 80f, circle, font);
+            SetRefs(component, ("closeButton", close));
+
             panel.gameObject.SetActive(false);
         }
 
@@ -317,10 +322,11 @@ namespace SimpleBox.EditorTools
                 if (scenes[i].path == scene.path) return;
             }
 
-            var updated = new EditorBuildSettingsScene[scenes.Length + 1];
-            updated[0] = new EditorBuildSettingsScene(scene.path, true); // first = startup scene
-            for (int i = 0; i < scenes.Length; i++) updated[i + 1] = scenes[i];
-            EditorBuildSettings.scenes = updated;
+            // First = startup scene, unless the Boot (loading) scene is already first: then the game scene goes right after it.
+            int insertAt = scenes.Length > 0 && scenes[0].path.EndsWith("/Boot.unity") ? 1 : 0;
+            var list = new System.Collections.Generic.List<EditorBuildSettingsScene>(scenes);
+            list.Insert(insertAt, new EditorBuildSettingsScene(scene.path, true));
+            EditorBuildSettings.scenes = list.ToArray();
         }
     }
 }

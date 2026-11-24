@@ -1,3 +1,4 @@
+using SimpleBox.Core;
 using SimpleBox.Gameplay;
 using SimpleBox.Gameplay.Tools;
 using UnityEngine;
@@ -82,7 +83,7 @@ namespace SimpleBox.Hud
 
         private void Show(BaseTool tool)
         {
-            toolLabel.text = tool != null && !string.IsNullOrEmpty(tool.DisplayName) ? tool.DisplayName : NoTool;
+            toolLabel.text = tool != null && !string.IsNullOrEmpty(tool.DisplayName) ? Loc.T(tool.DisplayName) : NoTool;
 
             if (toolIcon != null)
             {

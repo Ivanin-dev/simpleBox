@@ -1,3 +1,4 @@
+using SimpleBox.Core;
 using System;
 using System.Threading.Tasks;
 using Unity.Netcode;
@@ -54,14 +55,14 @@ namespace SimpleBox.Net
                 _session = await MultiplayerService.Instance.CreateSessionAsync(options);
                 Hook(_session);
                 WarnIfNotListening();
-                Status("Хост. Код сессии: " + _session.Code);
+                Status(Loc.T("Хост. Код сессии: ") + _session.Code);
                 CodeChanged?.Invoke(_session.Code);
             }
             catch (Exception e)
             {
                 Debug.LogException(e, this);
                 _session = null;
-                Status("Ошибка создания: " + e.Message);
+                Status(Loc.T("Ошибка создания: ") + e.Message);
             }
             finally
             {
@@ -86,18 +87,32 @@ namespace SimpleBox.Net
                 _session = await MultiplayerService.Instance.JoinSessionByCodeAsync(code.Trim().ToUpperInvariant());
                 Hook(_session);
                 WarnIfNotListening();
-                Status("Подключено к " + _session.Code);
+                Status(Loc.T("Подключено к ") + _session.Code);
                 CodeChanged?.Invoke(_session.Code);
             }
             catch (Exception e)
             {
                 Debug.LogException(e, this);
                 _session = null;
-                Status("Ошибка подключения: " + e.Message);
+                Status(Loc.T("Ошибка подключения: ") + e.Message);
             }
             finally
             {
                 _busy = false;
+            }
+        }
+
+        /// <summary>Host: removes a player from the session (they lose the relay connection and cannot use the slot).</summary>
+        public async void RemovePlayer(string authPlayerId)
+        {
+            if (_session == null || !_session.IsHost || string.IsNullOrEmpty(authPlayerId)) return;
+            try
+            {
+                await _session.AsHost().RemovePlayerAsync(authPlayerId);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[{nameof(NetworkSessionService)}] RemovePlayer failed: {e.Message}", this);
             }
         }
 
@@ -162,7 +177,7 @@ namespace SimpleBox.Net
                                  "Check that the scene has a NetworkManager with UnityTransport.", this);
         }
 
-        private void Status(string message) => StatusChanged?.Invoke(message);
+        private void Status(string message) => StatusChanged?.Invoke(Loc.T(message)); // constants are keys; prefixed texts are translated by the caller
 
         private void OnDestroy()
         {

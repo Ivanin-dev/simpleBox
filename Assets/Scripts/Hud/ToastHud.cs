@@ -1,3 +1,4 @@
+using SimpleBox.Core;
 using SimpleBox.Gameplay;
 using SimpleBox.World;
 using UnityEngine;
@@ -68,7 +69,7 @@ namespace SimpleBox.Hud
 
         private void Show(string message)
         {
-            label.text = message;
+            label.text = Loc.T(message);
             _hideTimer = duration;
         }
     }

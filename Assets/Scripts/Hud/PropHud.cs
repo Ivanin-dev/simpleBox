@@ -1,3 +1,4 @@
+using SimpleBox.Core;
 using SimpleBox.Gameplay;
 using SimpleBox.World;
 using UnityEngine;
@@ -95,7 +96,7 @@ namespace SimpleBox.Hud
         private void OnSpawnFailed(ActionResult result)
         {
             if (result == ActionResult.Invalid) return; // cooldown
-            nameLabel.text = result == ActionResult.OwnerLimit || result == ActionResult.ServerLimit ? limitMessage : noSpaceMessage;
+            nameLabel.text = result == ActionResult.OwnerLimit || result == ActionResult.ServerLimit ? Loc.T(limitMessage) : Loc.T(noSpaceMessage);
             nameLabel.color = failColor;
             _failTimer = failMessageDuration;
         }
@@ -104,7 +105,7 @@ namespace SimpleBox.Hud
         {
             _failTimer = 0f;
             PropDefinition def = spawner.IsValid ? spawner.SelectedDefinition : null;
-            nameLabel.text = def != null && !string.IsNullOrEmpty(def.displayName) ? def.displayName : NoSelection;
+            nameLabel.text = def != null && !string.IsNullOrEmpty(def.displayName) ? Loc.T(def.displayName) : NoSelection;
             nameLabel.color = normalColor;
             UpdateIcon();
         }

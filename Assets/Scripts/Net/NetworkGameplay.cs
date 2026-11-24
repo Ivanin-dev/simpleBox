@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using SimpleBox.Core;
 using SimpleBox.Gameplay;
 using SimpleBox.World;
 using Unity.Netcode;
@@ -31,7 +34,17 @@ namespace SimpleBox.Net
         [SerializeField] private bool removeEntitiesOnDisconnect = true;
 
         private NetworkManager _network;
+        private NetworkSessionService _session;
         private NetworkPlayerAvatar _localAvatar;
+        private readonly List<NetworkPlayerAvatar> _players = new List<NetworkPlayerAvatar>(8);
+
+        /// <summary>A player joined / left, or a nickname / auth id arrived.</summary>
+        public event Action PlayersChanged;
+
+        public int PlayerCount => _players.Count;
+        public NetworkPlayerAvatar GetPlayer(int index) => _players[index];
+        public bool IsHost => _network != null && _network.IsServer;
+        public string SessionCode => _session != null ? _session.Code : string.Empty;
         private bool _valid;
         private bool _subscribed;
         private bool _sceneClosing;
@@ -60,6 +73,7 @@ namespace SimpleBox.Net
                 return;
             }
             _network = GetComponent<NetworkManager>();
+            _session = GetComponent<NetworkSessionService>(); // optional: kick also removes the player from the session
             _valid = true;
         }
 
@@ -72,6 +86,7 @@ namespace SimpleBox.Net
             _network.OnClientDisconnectCallback += OnClientDisconnected;
             registry.EntityAdded += OnEntityAdded;
             registry.EntityRemoving += OnEntityRemoving;
+            BlockList.Changed += ApplyBlocks;
             _subscribed = true;
         }
 
@@ -90,6 +105,7 @@ namespace SimpleBox.Net
                 registry.EntityAdded -= OnEntityAdded;
                 registry.EntityRemoving -= OnEntityRemoving;
             }
+            BlockList.Changed -= ApplyBlocks;
             _subscribed = false;
         }
 
@@ -126,6 +142,9 @@ namespace SimpleBox.Net
         private void OnClientStopped(bool wasHost)
         {
             _localAvatar = null;
+            _players.Clear();
+            ApplyBlocks(); // unhide everything
+            PlayersChanged?.Invoke();
             actions.SetTransport(null);
             actions.SetLocalOwnerId((int)NetworkManager.ServerClientId);
             localPhysgun.Remote = null;
@@ -158,10 +177,80 @@ namespace SimpleBox.Net
             localPhysgun.Remote = null;
         }
 
+        // ------------------------------------------------------------------ Players (all peers)
+
+        public void RegisterPlayer(NetworkPlayerAvatar avatar)
+        {
+            if (avatar == null || _players.Contains(avatar)) return;
+            _players.Add(avatar);
+            NotifyPlayersChanged();
+        }
+
+        public void UnregisterPlayer(NetworkPlayerAvatar avatar)
+        {
+            if (_players.Remove(avatar)) NotifyPlayersChanged();
+        }
+
+        public void NotifyPlayersChanged()
+        {
+            ApplyBlocks();
+            PlayersChanged?.Invoke();
+        }
+
+        /// <summary>Player with this sandbox owner id (= client id), or null.</summary>
+        public NetworkPlayerAvatar FindPlayer(int ownerId)
+        {
+            for (int i = 0; i < _players.Count; i++)
+            {
+                NetworkPlayerAvatar p = _players[i];
+                if (p != null && p.PlayerOwnerId == ownerId) return p;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Host only: removes the player from the session (relay) and disconnects them. Their entities are removed by
+        /// the disconnect rule.
+        /// </summary>
+        public void Kick(NetworkPlayerAvatar avatar)
+        {
+            if (avatar == null || !_network.IsServer || avatar.OwnerClientId == NetworkManager.ServerClientId) return;
+            if (_session != null) _session.RemovePlayer(avatar.AuthId);
+            _network.DisconnectClient(avatar.OwnerClientId, "Хост исключил вас из игры");
+        }
+
+        /// <summary>
+        /// Local view of blocks: a blocked player's body / name and the entities they own are hidden for us.
+        /// Runs on block changes and player list changes (not per frame).
+        /// </summary>
+        private void ApplyBlocks()
+        {
+            for (int i = 0; i < _players.Count; i++)
+            {
+                NetworkPlayerAvatar p = _players[i];
+                if (p != null && !p.IsLocalPlayer) p.SetHiddenByBlock(BlockList.IsBlocked(p.AuthId));
+            }
+            for (int i = 0; i < registry.EntityCount; i++)
+            {
+                SandboxEntity e = registry.GetEntityAt(i);
+                if (e != null) e.SetHidden(IsOwnerBlocked(e.OwnerId));
+            }
+        }
+
+        private bool IsOwnerBlocked(int ownerId)
+        {
+            if (ownerId < 0 || _players.Count == 0) return false;
+            NetworkPlayerAvatar p = FindPlayer(ownerId);
+            return p != null && !p.IsLocalPlayer && BlockList.IsBlocked(p.AuthId);
+        }
+
         // ------------------------------------------------------------------ Entity replication (host)
 
         private void OnEntityAdded(SandboxEntity entity)
         {
+            if (IsOwnerBlocked(entity.OwnerId)) entity.SetHidden(true);
+            else if (entity.IsHidden) entity.SetHidden(false); // pooled instance hidden in a previous life
+
             if (!_network.IsServer || !_network.IsListening) return;
             if (!(entity.Replication is NetworkEntity ne)) return;
 

@@ -1,3 +1,4 @@
+using SimpleBox.Core;
 using SimpleBox.Controls;
 using SimpleBox.Net;
 using UnityEngine;
@@ -27,6 +28,10 @@ namespace SimpleBox.Hud
         [SerializeField] private Text codeText;
         [Tooltip("Keyboard shortcuts are blocked while the code field is focused (desktop).")]
         [SerializeField] private MobileInputController input;
+        [SerializeField] private TouchButton closeButton;
+        [Tooltip("\"ИГРОКИ\": shown while in a session, opens the players panel (block / report / kick).")]
+        [SerializeField] private TouchButton playersButton;
+        [SerializeField] private PlayersPanel playersPanel;
 
         private bool _valid;
         private bool _subscribed;
@@ -42,7 +47,7 @@ namespace SimpleBox.Hud
                 return;
             }
             panelRoot.SetActive(false);
-            statusText.text = "Не в сети";
+            statusText.text = Loc.T("Не в сети");
             if (codeText != null) codeText.text = string.Empty;
         }
 
@@ -65,12 +70,33 @@ namespace SimpleBox.Hud
             _subscribed = false;
         }
 
+        public bool IsOpen => _valid && panelRoot.activeSelf;
+
+        /// <summary>Opens the panel (main menu \"МУЛЬТИПЛЕЕР\").</summary>
+        public void Open()
+        {
+            if (_valid) panelRoot.SetActive(true);
+        }
+
         private void Update()
         {
             if (toggleButton.ConsumePress()) panelRoot.SetActive(!panelRoot.activeSelf);
+            if (closeButton != null && closeButton.isActiveAndEnabled && closeButton.ConsumePress()) panelRoot.SetActive(false);
             bool open = panelRoot.activeSelf;
             if (input != null) input.KeyboardBlocked = open && codeInput.isFocused;
             if (!open) return;
+
+            if (playersButton != null && playersPanel != null)
+            {
+                bool inSession = session.IsInSession;
+                if (playersButton.gameObject.activeSelf != inSession) playersButton.gameObject.SetActive(inSession);
+                if (inSession && playersButton.ConsumePress())
+                {
+                    panelRoot.SetActive(false);
+                    playersPanel.Open();
+                    return;
+                }
+            }
 
             if (hostButton.ConsumePress()) session.Host();
             if (joinButton.ConsumePress()) session.Join(codeInput.text);

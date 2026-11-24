@@ -1,3 +1,4 @@
+using SimpleBox.Core;
 using System;
 using SimpleBox.Controls;
 using SimpleBox.World;
@@ -33,6 +34,11 @@ namespace SimpleBox.Hud
         [SerializeField] private TouchButton closeButton;
 
         private static readonly string[] SlotNames = { "Авто", "Слот 1", "Слот 2", "Слот 3" };
+
+        public bool IsOpen => _valid && panelRoot.activeSelf;
+
+        /// <summary>A slot was loaded from this menu (arg: slot). The menu is already closed.</summary>
+        public event Action<int> Loaded;
 
         private bool _valid;
         private bool _subscribed;
@@ -86,8 +92,18 @@ namespace SimpleBox.Hud
                 {
                     saves.Load(slot);
                     panelRoot.SetActive(false);
+                    Loaded?.Invoke(slot);
+                    return;
                 }
             }
+        }
+
+        /// <summary>Opens the menu (main menu \"ЗАГРУЗИТЬ\").</summary>
+        public void Open()
+        {
+            if (!_valid) return;
+            panelRoot.SetActive(true);
+            Refresh();
         }
 
         private void Refresh()
@@ -95,7 +111,7 @@ namespace SimpleBox.Hud
             if (!panelRoot.activeSelf) return;
             for (int slot = 0; slot < rows.Length; slot++)
             {
-                string name = slot < SlotNames.Length ? SlotNames[slot] : "Слот " + slot;
+                string name = slot < SlotNames.Length ? Loc.T(SlotNames[slot]) : Loc.T("Слот ") + slot;
                 rows[slot].label.text = name + ": " + saves.DescribeSlot(slot);
             }
         }

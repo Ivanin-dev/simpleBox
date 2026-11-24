@@ -196,6 +196,21 @@ namespace SimpleBox.World
             if (Replication != null) Replication.OnColorChanged();
         }
 
+        /// <summary>True while the entity's own renderers are hidden (owner blocked by the local player).</summary>
+        public bool IsHidden { get; private set; }
+
+        /// <summary>Local view only: hides / shows the entity's own renderers (physics and colliders are unchanged).</summary>
+        public void SetHidden(bool hidden)
+        {
+            if (IsHidden == hidden) return;
+            CacheRenderers();
+            IsHidden = hidden;
+            for (int i = 0; i < _renderers.Length; i++)
+            {
+                if (_renderers[i] != null) _renderers[i].enabled = !hidden;
+            }
+        }
+
         private void Start()
         {
             CacheRenderers();

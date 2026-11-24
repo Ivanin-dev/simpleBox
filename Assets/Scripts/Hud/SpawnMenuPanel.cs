@@ -1,3 +1,4 @@
+using SimpleBox.Core;
 using SimpleBox.Controls;
 using SimpleBox.Gameplay;
 using UnityEngine;
@@ -70,7 +71,7 @@ namespace SimpleBox.Hud
                 }
                 Transform labelT = cell.transform.Find("Label");
                 Text label = labelT != null ? labelT.GetComponent<Text>() : null;
-                if (label != null) label.text = def.displayName;
+                if (label != null) label.text = Loc.T(def.displayName);
 
                 _cells[built] = cell.GetComponent<TouchButton>();
                 _cellTypeIndex[built] = i;

@@ -1,5 +1,5 @@
 using UnityEngine;
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
 using UnityEngine.InputSystem;
 #endif
 
@@ -71,10 +71,10 @@ namespace SimpleBox.Controls
         [Tooltip("Meters per mouse wheel notch (desktop).")]
         [SerializeField, Min(0.05f)] private float wheelDistanceStep = 0.5f;
 
-        [Header("Editor / Desktop fallback")]
+        [Header("Editor-only keyboard / mouse fallback (mobile-only game: not compiled into builds)")]
         [Tooltip("WASD move, Space jump/fly up, LeftCtrl fly down, V noclip, R/G spawn, Q spawn menu, wheel cycle " +
                  "(hold distance while holding), RMB held = rotate held prop, 1-9 select prop, Tab / Shift+Tab cycle tool, " +
-                 "F1-F10 select tool, E = sit / exit, arrows = bindings 1-4, click on look zone = Use Tool, X = tool Alt, T = thrust on/off, Z = undo, Backspace = clear.")]
+                 "F1-F10 select tool, E = sit / exit, Esc = settings, arrows = bindings 1-4, click on look zone = Use Tool, X = tool Alt, T = thrust on/off, Z = undo, Backspace = clear.")]
         [SerializeField] private bool keyboardFallback = true;
 
         private bool _valid;
@@ -102,7 +102,29 @@ namespace SimpleBox.Controls
         /// <summary>Set by UI while a text field is focused: keyboard shortcuts are ignored (typing a session code).</summary>
         public bool KeyboardBlocked { get; set; }
 
-        private bool KeyboardActive => keyboardFallback && !KeyboardBlocked;
+        /// <summary>Set by a full-screen menu (settings) while open: game shortcuts are ignored, its own toggle key still works.</summary>
+        public bool MenuOpen { get; set; }
+
+        /// <summary>Set by the main menu while it is shown: game shortcuts are ignored (independent of MenuOpen).</summary>
+        public bool MainMenuOpen { get; set; }
+
+        private bool KeyboardActive => keyboardFallback && !KeyboardBlocked && !MenuOpen && !MainMenuOpen;
+
+        private float _lookScale = 1f;
+
+        /// <summary>User setting: multiplier on the Inspector look sensitivity (0.1..5).</summary>
+        public float LookSensitivityScale
+        {
+            get => _lookScale;
+            set => _lookScale = Mathf.Clamp(value, 0.1f, 5f);
+        }
+
+        /// <summary>User setting: inverted vertical look.</summary>
+        public bool InvertY
+        {
+            get => invertY;
+            set => invertY = value;
+        }
 
         public bool IsValid => _valid;
         public bool HasPropWidgets => _propWidgetsValid;
@@ -176,7 +198,7 @@ namespace SimpleBox.Controls
             get
             {
                 Vector2 move = _valid ? joystick.Value : Vector2.zero;
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
                 if (KeyboardActive && move.sqrMagnitude < 0.0001f)
                 {
                     Keyboard kb = Keyboard.current;
@@ -200,7 +222,7 @@ namespace SimpleBox.Controls
             if (!_valid || LookCaptured) return Vector2.zero; // the held-prop rotation reads the delta instead
 
             Vector2 px = lookZone.ConsumeDelta();
-            float k = lookSensitivity / Mathf.Max(1, Screen.height);
+            float k = lookSensitivity * _lookScale / Mathf.Max(1, Screen.height);
             px.x *= k;
             px.y *= invertY ? k : -k;
             return px;
@@ -214,7 +236,7 @@ namespace SimpleBox.Controls
             get
             {
                 bool held = _holdWidgetsValid && rotateButton.IsHeld;
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
                 if (KeyboardActive && Mouse.current != null && Mouse.current.rightButton.isPressed) held = true;
 #endif
                 return held;
@@ -245,7 +267,7 @@ namespace SimpleBox.Controls
                 float px = distanceZone.ConsumeDelta().y; // always consume so nothing is applied late
                 meters = px * (distanceSensitivity / Mathf.Max(1, Screen.height));
             }
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
             if (KeyboardActive && HoldMode && Mouse.current != null)
             {
                 float wheel = Mouse.current.scroll.ReadValue().y;
@@ -267,7 +289,7 @@ namespace SimpleBox.Controls
             get
             {
                 bool held = _valid && jumpButton.IsHeld;
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
                 if (KeyboardActive && Keyboard.current != null && Keyboard.current.spaceKey.isPressed) held = true;
 #endif
                 return held;
@@ -280,7 +302,7 @@ namespace SimpleBox.Controls
             get
             {
                 bool held = _flyWidgetsValid && downButton.IsHeld;
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
                 if (KeyboardActive && Keyboard.current != null && Keyboard.current.leftCtrlKey.isPressed) held = true;
 #endif
                 return held;
@@ -298,7 +320,7 @@ namespace SimpleBox.Controls
         public int ConsumePropCycle()
         {
             int dir = (_propWidgetsValid && nextPropButton.ConsumePress()) ? 1 : 0;
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
             if (KeyboardActive)
             {
                 Keyboard kb = Keyboard.current;
@@ -319,7 +341,7 @@ namespace SimpleBox.Controls
         /// <summary>Direct selection index from keys 1..9 (0..8), or -1.</summary>
         public int ConsumePropSelect()
         {
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
             if (!KeyboardActive) return -1;
             Keyboard kb = Keyboard.current;
             if (kb == null) return -1;
@@ -341,7 +363,7 @@ namespace SimpleBox.Controls
             // Always consume the tap so it never fires late.
             bool tap = _valid && lookZone.ConsumeTap();
             bool tapAllowed = touchTapUsesTool;
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
             tapAllowed |= keyboardFallback;
 #endif
             return pressed | (tap && tapAllowed);
@@ -359,7 +381,7 @@ namespace SimpleBox.Controls
         public int ConsumeToolCycle()
         {
             int dir = (_toolWidgetsValid && nextToolButton.ConsumePress()) ? 1 : 0;
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
             if (KeyboardActive)
             {
                 Keyboard kb = Keyboard.current;
@@ -372,7 +394,7 @@ namespace SimpleBox.Controls
         /// <summary>Direct tool index from F1..F6 (0..5), or -1. Digits stay reserved for prop selection.</summary>
         public int ConsumeToolSelect()
         {
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
             if (!KeyboardActive) return -1;
             Keyboard kb = Keyboard.current;
             if (kb == null) return -1;
@@ -403,7 +425,7 @@ namespace SimpleBox.Controls
                     for (int i = 0; i < bindingButtons.Length; i++)
                         if (bindingButtons[i].IsHeld) mask |= 1 << i;
                 }
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
                 Keyboard kb = Keyboard.current;
                 if (KeyboardActive && kb != null)
                 {
@@ -428,11 +450,23 @@ namespace SimpleBox.Controls
         /// <summary>Spawn menu toggle key (Q). The on-screen opener is the prop panel itself (SpawnMenuPanel).</summary>
         public bool ConsumeSpawnMenu() => KeyDown(KeyId.SpawnMenu);
 
+        /// <summary>Settings menu toggle key (Esc). The on-screen opener is the settings button (SettingsPanel).</summary>
+        public bool ConsumeSettingsMenu()
+        {
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
+            if (!keyboardFallback || KeyboardBlocked) return false; // not while typing; works while MenuOpen
+            Keyboard kb = Keyboard.current;
+            return kb != null && kb.escapeKey.wasPressedThisFrame;
+#else
+            return false;
+#endif
+        }
+
         private enum KeyId { Jump, Spawn, ToolAlt, Thrust, Undo, Clear, Fly, Sit, SpawnMenu }
 
         private bool KeyDown(KeyId id)
         {
-#if ENABLE_INPUT_SYSTEM && (UNITY_EDITOR || UNITY_STANDALONE)
+#if ENABLE_INPUT_SYSTEM && UNITY_EDITOR
             if (!KeyboardActive) return false;
             Keyboard kb = Keyboard.current;
             if (kb == null) return false;

@@ -72,7 +72,9 @@ namespace SimpleBox.Core
             if (_initialized || !IsValid) return;
             _initialized = true;
 
-            _activeTier = forceTier != Tier.Auto ? forceTier : Detect();
+            // Inspector Force Tier (testing) wins, then the user's choice from the settings menu, then detection.
+            Tier user = GameSettings.SavedQualityTier;
+            _activeTier = forceTier != Tier.Auto ? forceTier : user != Tier.Auto ? user : Detect();
             _active = _activeTier == Tier.Recommended ? recommended : minimum;
             Apply(_active);
 

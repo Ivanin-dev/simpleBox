@@ -1,3 +1,4 @@
+using SimpleBox.Core;
 using System;
 using SimpleBox.Controls;
 using SimpleBox.Gameplay.Tools;
@@ -149,7 +150,7 @@ namespace SimpleBox.Hud
                 if (show) _visibleRows = i + 1;
             }
 
-            title.text = _tool.DisplayName;
+            title.text = Loc.T(_tool.DisplayName);
             panelRoot.SetActive(true);
             _open = true;
         }
@@ -172,22 +173,23 @@ namespace SimpleBox.Hud
             switch (info.Kind)
             {
                 case ToolSettingKind.Toggle:
-                    labels = new[] { offText, onText };
+                    labels = new[] { Loc.T(offText), Loc.T(onText) };
                     break;
                 case ToolSettingKind.Choice:
-                    labels = info.Choices; // constant array owned by the tool
+                    labels = new string[info.Choices.Length]; // translated copy (Open only)
+                    for (int k = 0; k < labels.Length; k++) labels[k] = Loc.T(info.Choices[k]);
                     break;
                 default:
                     labels = new string[n];
                     for (int k = 0; k < n; k++)
-                        labels[k] = info.FromIndex(k).ToString(string.IsNullOrEmpty(info.Format) ? "0.##" : info.Format) + info.Unit;
+                        labels[k] = info.FromIndex(k).ToString(string.IsNullOrEmpty(info.Format) ? "0.##" : info.Format) + Loc.T(info.Unit);
                     break;
             }
 
             _infos[i] = info;
             _labels[i] = labels;
             _indices[i] = info.ToIndex(_tool.GetSettingValue(i));
-            rows[i].label.text = info.Label;
+            rows[i].label.text = Loc.T(info.Label);
             rows[i].value.text = labels[_indices[i]];
             return true;
         }

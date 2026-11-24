@@ -1,3 +1,4 @@
+using SimpleBox.Core;
 using System;
 using UnityEngine;
 
@@ -31,11 +32,14 @@ namespace SimpleBox.Gameplay.Tools
         /// <summary>Raised when Hint changes.</summary>
         public event Action HintChanged;
 
+        private string _hintKey;
+
         protected void SetHint(string hint)
         {
             if (hint == null) hint = string.Empty;
-            if (ReferenceEquals(hint, Hint)) return;
-            Hint = hint;
+            if (ReferenceEquals(hint, _hintKey)) return;
+            _hintKey = hint;
+            Hint = Loc.T(hint); // Russian source -> current language (cached string, no allocation)
             HintChanged?.Invoke();
         }
 

@@ -107,6 +107,7 @@ namespace SimpleBox.EditorTools
             PlayerController playerController = player.GetComponent<PlayerController>();
             SetRefs(toastHud, ("commands", sys.Commands), ("player", playerController), ("saves", sys.Saves));
             BuildSaveMenu(input, sys.Saves);
+            BuildGameSettings(input, sys.Quality);
             // Seats: sit / exit, joystick driving merged into bindings.
             SeatController seatController = player.AddComponent<SeatController>();
             PhysicsGun playerGun = player.GetComponent<PhysicsGun>();
@@ -129,8 +130,12 @@ namespace SimpleBox.EditorTools
                 ("thrusterRegistry", sys.Thrusters),
                 ("thrustIndicator", thrustLabel));
             SetRefs(settingsPanel, ("toolManager", toolManager));
+            BuildOnboarding(input, player, playerGun, toolManager, sys);
 
             BuildNetwork(sys, player, input, catalog, playerLayer);
+            GameObject environmentRoot = GameObject.Find("Environment");
+            BuildMainMenu(input, playerGun, sys, environmentRoot != null ? environmentRoot.transform : null);
+            AddLocalizedTexts(input.transform); // after every UI piece exists
             EnsureSceneInBuildSettings(scene);
 
             Undo.CollapseUndoOperations(undoGroup);
